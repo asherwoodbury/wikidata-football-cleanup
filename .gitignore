@@ -23,8 +23,16 @@ Thumbs.db
 # Project specific
 data/proposed/*.json
 data/submitted/*.json
+data/wikipedia_articles/*.json
+data/batches/*.txt
 !data/proposed/.gitkeep
 !data/submitted/.gitkeep
+!data/batches/.gitkeep
+
+# Cache and checkpoint files
+.progress_cache.txt
+.checkpoint.json
+*.tmp
 
 # Don't ignore the main stale entries file
 !data/stale_entries.csv
