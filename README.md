@@ -67,17 +67,50 @@ pip install -r requirements.txt
 
 ### Usage
 
+The workflow has two stages: async fetching (runs overnight) and interactive processing (with Claude).
+
+#### Stage 1: Fetch Wikipedia Articles (Overnight)
+
 ```bash
-# 1. Identify stale entries (or use provided data/stale_entries.csv)
-python scripts/identify_stale.py
+# Fetch all ~11,000 players (takes several hours)
+python scripts/fetch_wikipedia.py \
+    --input data/stale_entries.csv \
+    --output data/wikipedia_articles/
 
-# 2. Run AI agent to propose corrections
-python agent/career_extractor.py --input data/stale_entries.csv --output data/proposed/
+# Or fetch a specific era first
+python scripts/fetch_wikipedia.py \
+    --input data/stale_entries.csv \
+    --output data/wikipedia_articles/ \
+    --era "2018-2021"
 
-# 3. Review proposed corrections manually
+# Resume if interrupted
+python scripts/fetch_wikipedia.py \
+    --input data/stale_entries.csv \
+    --output data/wikipedia_articles/ \
+    --resume
 
-# 4. Generate QuickStatements
-python agent/quickstatements.py --input data/proposed/reviewed.csv
+# Check progress
+python scripts/summarize_fetched.py --input data/wikipedia_articles/
+```
+
+#### Stage 2: Process with Claude (Interactive)
+
+```bash
+# Prepare a batch of 50 articles for processing
+python scripts/prepare_batch.py \
+    --input data/wikipedia_articles/ \
+    --output data/batches/batch_001.txt \
+    --limit 50
+
+# Then in Claude Code:
+# "Read data/batches/batch_001.txt and extract end dates for each player"
+```
+
+#### Stage 3: Generate QuickStatements
+
+```bash
+# After Claude processing, generate Wikidata commands
+python agent/quickstatements.py --input data/proposed/batch_001.json --output data/submitted/batch_001.qs
 ```
 
 ## Contributing
