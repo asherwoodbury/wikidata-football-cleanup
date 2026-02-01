@@ -195,6 +195,39 @@ def search_wikipedia(query: str, limit: int = SEARCH_RESULT_LIMIT) -> list[str]:
         return []
 
 
+def get_wikipedia_title_from_wikidata(qid: str) -> str | None:
+    """Get the English Wikipedia article title directly from Wikidata.
+
+    This is the most reliable method since we already have the Wikidata QID.
+    Handles special characters (ñ, ö, etc.) correctly.
+    """
+    params = {
+        "action": "wbgetentities",
+        "ids": qid,
+        "props": "sitelinks",
+        "sitefilter": "enwiki",
+        "format": "json",
+    }
+
+    try:
+        response = _session.get(
+            "https://www.wikidata.org/w/api.php",
+            params=params,
+            headers={"User-Agent": USER_AGENT},
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        entity = data.get("entities", {}).get(qid, {})
+        sitelinks = entity.get("sitelinks", {})
+        enwiki = sitelinks.get("enwiki", {})
+        return enwiki.get("title")
+    except Exception as e:
+        # Silently fail - we'll fall back to name-based search
+        return None
+
+
 def generate_title_variations(name: str) -> list[str]:
     """Generate possible Wikipedia article title variations for a player name."""
     variations = []
@@ -216,7 +249,11 @@ def generate_title_variations(name: str) -> list[str]:
 def fetch_player_article(player_name: str, player_qid: str) -> dict:
     """
     Try to fetch Wikipedia article for a player.
-    Uses batch API calls for efficiency.
+
+    Strategy:
+    1. First, ask Wikidata for the exact Wikipedia title (handles special chars like ñ, ö)
+    2. Fall back to name-based title variations
+    3. Fall back to Wikipedia search
     """
     result = {
         "player_name": player_name,
@@ -227,9 +264,19 @@ def fetch_player_article(player_name: str, player_qid: str) -> dict:
         "fetched_at": datetime.utcnow().isoformat(),
     }
 
-    # Generate all title variations upfront
+    # Strategy 1: Get exact title from Wikidata (most reliable)
+    wikidata_title = get_wikipedia_title_from_wikidata(player_qid)
+    if wikidata_title:
+        result["attempted_titles"].append(f"[wikidata] {wikidata_title}")
+        article = fetch_article_by_title(wikidata_title)
+        if article and len(article.get("extract", "")) > MIN_ARTICLE_LENGTH:
+            result["status"] = "found"
+            result["article"] = article
+            return result
+
+    # Strategy 2: Try name-based title variations
     title_variations = generate_title_variations(player_name)
-    result["attempted_titles"] = title_variations.copy()
+    result["attempted_titles"].extend(title_variations)
 
     # Try to fetch all variations in one API call
     batch_results = fetch_article_batch(title_variations)
